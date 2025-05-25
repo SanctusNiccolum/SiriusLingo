@@ -1,0 +1,44 @@
+# JetBrains IDE files
+.idea/
+*.iml
+
+# Go-specific
+/auth-service/auth-service
+/user-service/user-service
+/auth-service/go.sum
+/user-service/go.sum
+/auth-service/bin/
+/user-service/bin/
+
+# Python-specific
+/test-service/__pycache__/
+/test-service/*.pyc
+/test-service/venv/
+/test-service/.venv/
+/test-service/*.egg-info/
+
+# Node.js-specific (Frontend with Vite)
+/frontend/node_modules/
+/frontend/dist/
+
+# Docker and environment files
+.env
+.env.local
+.env.*.local
+*.log
+docker-compose.yml.bak
+
+# Database migrations and temporary files
+/auth-service/db/data/
+/user-service/db/data/
+/test-service/db/data/
+/*.sql.bak
+
+# OS-specific files
+.DS_Store
+Thumbs.db
+
+# Build artifacts and temporary files
+*.swp
+*.swo
+*.tmp
