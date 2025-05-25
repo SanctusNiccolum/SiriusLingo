@@ -39,7 +39,9 @@ go mod tidy
 - User Service:
 ```
 cd user-service
-go mod tidy
+python -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
 ```
 
 - Test Service:
@@ -85,8 +87,7 @@ protoc --go_out=auth-service/gen/go --go_opt=paths=source_relative \
 proto/sso.proto
 ```
 ```
-protoc --go_out=user-service/gen/go --go_opt=paths=source_relative \
---go-grpc_out=user-service/gen/go --go-grpc_opt=paths=source_relative \
+protoc --python_out=user-service/gen/python --grpc_python_out=user-service/gen/python \
 proto/user.proto
 ```
 ```
@@ -114,7 +115,8 @@ go run cmd/main.go
 - User Service:
 ```
 cd user-service
-go run cmd/main.go
+source venv/bin/activate
+python src/main.py
 ```
 
 - Test Service:
@@ -149,5 +151,5 @@ npm run dev
 - **Frontend-разработчик:** Сергей Телегин
 - **Backend-разработчики:** Вероника Машталер и Сергей Телегин
 
-Лицензия
-MIT License
+## Лицензия
+[MIT License](LICENSE)
