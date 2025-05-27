@@ -1,0 +1,120 @@
+services:
+  auth-db:
+    image: postgres:14
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: auth_db
+    volumes:
+      - auth-db-data:/var/lib/postgresql/data
+    ports:
+      - "5433:5432"
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  user-db:
+    image: postgres:14
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: user_db
+    volumes:
+      - user-db-data:/var/lib/postgresql/data
+    ports:
+      - "5434:5432"
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  testing-db:
+    image: postgres:14
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: testing_db
+    volumes:
+      - testing-db-data:/var/lib/postgresql/data
+    ports:
+      - "5435:5432"
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  auth-service:
+    build:
+      context: .
+      dockerfile: Dockerfile-auth
+    ports:
+      - "50051:50051"
+    depends_on:
+      auth-db:
+        condition: service_healthy
+    environment:
+      DB_HOST: postgres
+      DB_NAME: auth_db
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+
+  user-service:
+    build:
+      context: .
+      dockerfile: Dockerfile-user
+    ports:
+      - "50052:50052"
+    depends_on:
+      user-db:
+        condition: service_healthy
+    environment:
+      DB_HOST: postgres
+      DB_NAME: user_db
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+
+  test-service:
+    build:
+      context: .
+      dockerfile: Dockerfile-test
+    ports:
+      - "50053:50053"
+    depends_on:
+      testing-db:
+        condition: service_healthy
+    environment:
+      DB_HOST: postgres
+      DB_NAME: test_db
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+
+  envoy:
+    image: envoyproxy/envoy:v1.30.1
+    volumes:
+      - ./envoy.yaml:/etc/envoy/envoy.yaml
+    ports:
+      - "8080:8080"
+    depends_on:
+      - auth-service
+      - user-service
+      - test-service
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile-front
+    ports:
+      - "3000:3000"
+    depends_on:
+      - envoy
+    volumes:
+      - ./frontend:/app
+
+volumes:
+  auth-db-data:
+  user-db-data:
+  testing-db-data:

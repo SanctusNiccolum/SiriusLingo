@@ -1,0 +1,45 @@
+# Базовый образ для сборки
+FROM python:3.9-slim AS builder
+
+WORKDIR /app
+
+# Установка зависимостей для компиляции
+RUN apt-get update && apt-get install -y protobuf-compiler g++ && \
+    rm -rf /var/lib/apt/lists/*
+
+# Создаем структуру директорий
+RUN mkdir -p backend/test-service/gen/python
+
+# Устанавливаем grpcio-tools перед генерацией кода
+RUN pip install --no-cache-dir grpcio-tools==1.71.0
+
+# Копируем proto файлы
+COPY proto/sso.proto proto/test.proto ./proto/
+
+# Генерируем Python код для test-service
+RUN python -m grpc_tools.protoc \
+    -I./proto \
+    --python_out=./backend/test-service/gen/python \
+    --grpc_python_out=./backend/test-service/gen/python \
+    ./proto/sso.proto \
+    ./proto/test.proto
+
+# Копируем остальные файлы
+COPY backend/test-service/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+COPY backend/test-service/ ./backend/test-service/
+
+# Финальный образ
+FROM python:3.9-slim
+WORKDIR /app
+
+COPY --from=builder /app/backend/test-service /app
+COPY --from=builder /usr/local/lib/python3.9/site-packages /usr/local/lib/python3.9/site-packages
+
+ENV PYTHONPATH=/app \
+    DB_HOST=postgres \
+    DB_NAME=test_db \
+    DB_USER=postgres \
+    DB_PASSWORD=postgres
+
+CMD ["python", "src/main.py"]
