@@ -1,0 +1,43 @@
+# Базовый образ для сборки
+FROM ubuntu:22.04 AS builder
+
+# Установка зависимостей и Go
+RUN apt-get update && apt-get install -y wget git gcc protobuf-compiler && \
+    rm -rf /var/lib/apt/lists/*
+RUN wget https://go.dev/dl/go1.21.9.linux-amd64.tar.gz && \
+    tar -C /usr/local -xzf go1.21.9.linux-amd64.tar.gz
+ENV PATH="/usr/local/go/bin:${PATH}"
+
+# Установка Go и настройка PATH для плагинов
+ENV GOPATH=/go
+ENV PATH="${GOPATH}/bin:${PATH}"
+RUN mkdir -p ${GOPATH}/bin
+
+# Установка плагинов protoc
+RUN go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.28 && \
+    go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.2
+
+WORKDIR /app
+
+# Загрузка зависимостей Go
+COPY backend/auth-service/go.mod backend/auth-service/go.sum ./
+RUN go mod download
+
+# Копируем proto и исходные файлы
+COPY proto/sso.proto ./proto/
+COPY backend/auth-service/ ./backend/auth-service/
+
+# Генерируем Go-код
+RUN protoc --go_out=backend/auth-service/gen/go --go_opt=paths=source_relative \
+           --go-grpc_out=backend/auth-service/gen/go --go-grpc_opt=paths=source_relative \
+           proto/sso.proto
+
+# Сборка приложения
+WORKDIR /app/backend/auth-service
+RUN go build -o auth-service ./cmd/main.go
+
+# Финальный образ (Debian 12 вместо Debian 11)
+FROM gcr.io/distroless/base-debian12
+WORKDIR /app
+COPY --from=builder /app/backend/auth-service/auth-service .
+CMD ["./auth-service"]

@@ -1,0 +1,8 @@
+syntax = "proto3";
+
+package sso;
+
+option go_package = "github.com/SiriusLingua/lingua-test/gen/go/sso";
+
+service AuthService {
+}
