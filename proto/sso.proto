@@ -1,8 +1,43 @@
 syntax = "proto3";
 
-package sso;
+package auth;
 
-option go_package = "github.com/SiriusLingua/lingua-test/gen/go/sso";
+option go_package = "./proto/auth";
 
 service AuthService {
+  rpc Register (RegisterRequest) returns (RegisterResponse);
+  rpc Login (LoginRequest) returns (LoginResponse);
+  rpc ValidateToken (ValidateTokenRequest) returns (ValidateTokenResponse);
+  rpc Logout (LogoutRequest) returns (LogoutResponse); // Новый метод
 }
+
+message RegisterRequest {
+  string username = 1;
+  string password = 2;
+  string email = 3;
+}
+
+message RegisterResponse {}
+
+message LoginRequest {
+  string username = 1;
+  string password = 2;
+}
+
+message LoginResponse {
+  string access_token = 1;
+  string refresh_token = 2;
+}
+
+message ValidateTokenRequest {
+  string token = 1;
+  string token_type = 2;
+}
+
+message ValidateTokenResponse {}
+
+message LogoutRequest {
+  int64 user_id = 1;
+}
+
+message LogoutResponse {}

@@ -1,0 +1,55 @@
+package server
+
+import (
+	"context"
+	"net"
+
+	pb "github.com/SanctusNiccolum/SiriusLingo/backend/auth-service/gen/go/proto"
+	"github.com/SanctusNiccolum/SiriusLingo/backend/auth-service/internal/service"
+	"go.uber.org/zap"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/reflection"
+)
+
+type AuthServer struct {
+	pb.UnimplementedAuthServiceServer
+	grpcServer *grpc.Server
+	errChan    chan error
+	logger     *zap.Logger
+	service    *service.AuthService
+}
+
+func NewAuthServer(svc *service.AuthService, logger *zap.Logger, addr string) (*AuthServer, error) {
+	listener, err := net.Listen("tcp", addr)
+	if err != nil {
+		return nil, err
+	}
+
+	grpcServer := grpc.NewServer()
+	s := &AuthServer{
+		grpcServer: grpcServer,
+		errChan:    make(chan error, 1),
+		logger:     logger,
+		service:    svc,
+	}
+	reflection.Register(grpcServer)
+	pb.RegisterAuthServiceServer(grpcServer, s)
+
+	go func() {
+		s.errChan <- grpcServer.Serve(listener)
+	}()
+
+	return s, nil
+}
+
+func (s *AuthServer) Register(ctx context.Context, req *pb.RegisterRequest) (*pb.RegisterResponse, error) {
+	return s.service.Register(ctx, req)
+}
+
+func (s *AuthServer) ErrChan() chan error {
+	return s.errChan
+}
+
+func (s *AuthServer) Stop() {
+	s.grpcServer.GracefulStop()
+}

@@ -1,17 +1,28 @@
-CREATE TABLE Roles (
-    Roles_id_PK BIGINT primary key,
-    Roles_name TEXT,
-    Roles_code INT,
-    Roles_descr TEXT
+DROP TABLE users;
+DROP TABLE roles;
+
+CREATE TABLE roles (
+   roles_id_pk BIGSERIAL PRIMARY KEY,
+   roles_name TEXT UNIQUE,
+   roles_code INT UNIQUE,
+   roles_descr TEXT
 );
 
-CREATE TABLE Users (
-	Users_id_PK BIGINT,
-	Users_username VARCHAR(100),
-	Users_password_hash TEXT,
-	Users_email TEXT,
-	Users_create TIMESTAMP DEFAULT now(),
-	Users_auth TIMESTAMP DEFAULT now(),
-	Users_roles_id_FK BIGINT,
-	FOREIGN KEY(Users_roles_id_FK) references Roles(Roles_id_PK)
-)
+CREATE TABLE users (
+   users_id_pk BIGSERIAL PRIMARY KEY,
+   users_username VARCHAR(100) UNIQUE,
+   users_password_hash TEXT,
+   users_email TEXT UNIQUE,
+   users_auth_time TIMESTAMP DEFAULT now(),
+   users_roles_id_fk BIGINT,
+   users_access_token_secret TEXT,
+   users_refresh_token_secret TEXT,
+   users_access_token_jti UUID,
+   users_refresh_token_jti UUID,
+   users_created_at TIMESTAMP DEFAULT now(),
+   users_updated_at TIMESTAMP DEFAULT now(),
+   FOREIGN KEY(users_roles_id_fk) REFERENCES roles(roles_id_pk)
+);
+
+INSERT INTO roles (roles_name, roles_code, roles_descr)
+VALUES ('user', 1, 'default user of app');

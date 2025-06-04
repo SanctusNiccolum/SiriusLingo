@@ -1,25 +1,40 @@
 package main
 
 import (
-	sso "github.com/SanctusNiccolum/SiriusLingo/gen/go/proto"
-	"google.golang.org/grpc"
-	"log"
-	"net"
+	"os"
+	"os/signal"
+	"syscall"
+
+	"github.com/SanctusNiccolum/SiriusLingo/backend/auth-service/internal/config"
+	"github.com/SanctusNiccolum/SiriusLingo/backend/auth-service/internal/deps"
+	"github.com/SanctusNiccolum/SiriusLingo/backend/auth-service/internal/logger"
+	"go.uber.org/zap"
 )
 
-type Server struct {
-	sso.UnimplementedAuthServiceServer
-}
-
 func main() {
-	lis, err := net.Listen("tcp", ":50051")
+	log := logger.NewLogger()
+	defer log.Sync()
+
+	cfg, err := config.LoadConfig()
 	if err != nil {
-		log.Fatalf("Failed to listen: %v", err)
+		log.Fatal("Error loading config", zap.Error(err))
 	}
-	grpcServer := grpc.NewServer()
-	sso.RegisterAuthServiceServer(grpcServer, &Server{})
-	log.Println("Auth Service running on :50051")
-	if err := grpcServer.Serve(lis); err != nil {
-		log.Fatalf("Failed to serve: %v", err)
+	if cfg.DBHost == "" || cfg.DBPort == "" || cfg.DBUser == "" || cfg.DBPassword == "" || cfg.DBName == "" || cfg.GRPCAddr == "" {
+		log.Fatal("Missing required configuration values in .env file")
+		return
 	}
+
+	depends, err := deps.ProvideDependencies(*cfg)
+	if err != nil {
+		log.Fatal("Failed to initialize dependencies", zap.Error(err))
+	}
+	defer depends.Cleanup()
+
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+
+	log.Info("Server started successfully", zap.String("address", cfg.GRPCAddr))
+	<-sigChan
+
+	log.Info("Shutting down server...")
 }
