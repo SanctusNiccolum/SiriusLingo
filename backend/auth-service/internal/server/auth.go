@@ -46,6 +46,10 @@ func (s *AuthServer) Register(ctx context.Context, req *pb.RegisterRequest) (*pb
 	return s.service.Register(ctx, req)
 }
 
+func (s *AuthServer) Login(ctx context.Context, req *pb.LoginRequest) (*pb.LoginResponse, error) {
+	return s.service.Login(ctx, req)
+}
+
 func (s *AuthServer) ErrChan() chan error {
 	return s.errChan
 }
