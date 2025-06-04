@@ -7,6 +7,8 @@ import (
 	pb "github.com/SanctusNiccolum/SiriusLingo/backend/auth-service/gen/go/proto"
 	"github.com/SanctusNiccolum/SiriusLingo/backend/auth-service/internal/config"
 	"github.com/SanctusNiccolum/SiriusLingo/backend/auth-service/internal/db"
+	"github.com/dgrijalva/jwt-go"
+	"github.com/google/uuid"
 	"go.uber.org/zap"
 	"golang.org/x/crypto/bcrypt"
 	"google.golang.org/grpc/codes"
@@ -85,4 +87,103 @@ func (s *AuthService) Register(ctx context.Context, req *pb.RegisterRequest) (*p
 
 	s.logger.Info("User registered successfully", zap.String("username", req.Username))
 	return &pb.RegisterResponse{}, nil
+}
+
+func (s *AuthService) Login(ctx context.Context, req *pb.LoginRequest) (*pb.LoginResponse, error) {
+	s.logger.Debug("Logging in user", zap.String("username", req.Username))
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	user, err := s.db.UserQuery().GetByUsername(ctx, req.Username)
+	if err != nil {
+		s.logger.Error("Failed to fetch user", zap.Error(err))
+		return nil, status.Error(codes.Internal, "failed to fetch user")
+	}
+	if user == nil {
+		s.logger.Warn("User not found", zap.String("username", req.Username))
+		return nil, status.Error(codes.NotFound, "user not found")
+	}
+
+	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.Password)); err != nil {
+		s.logger.Warn("Invalid password", zap.String("username", req.Username))
+		return nil, status.Error(codes.Unauthenticated, "invalid password")
+	}
+
+	role, err := s.db.RoleQuery().GetByID(ctx, user.RoleID)
+	if err != nil {
+		s.logger.Error("Failed to fetch role", zap.Error(err), zap.Int64("role_id", user.RoleID))
+		return nil, status.Error(codes.Internal, "failed to fetch role")
+	}
+	if role == nil {
+		s.logger.Warn("Role not found", zap.Int64("role_id", user.RoleID))
+		return nil, status.Error(codes.NotFound, "role not found")
+	}
+
+	accessJTI := uuid.New().String()
+	refreshJTI := uuid.New().String()
+
+	accessToken, err := s.generateJWT(user.ID, "access", role.Name, s.config.ACCESS_TOKEN_EXPIRES_IN, []byte(user.AccessTokenSecret), accessJTI)
+	if err != nil {
+		s.logger.Error("Failed to generate access token", zap.Error(err))
+		return nil, status.Error(codes.Internal, "failed to generate access token")
+	}
+	refreshToken, err := s.generateJWT(user.ID, "refresh", role.Name, s.config.REFRESH_TOKEN_EXPIRES_IN, []byte(user.RefreshTokenSecret), refreshJTI)
+	if err != nil {
+		s.logger.Error("Failed to generate refresh token", zap.Error(err))
+		return nil, status.Error(codes.Internal, "failed to generate refresh token")
+	}
+
+	user.AccessTokenJTI = &accessJTI
+	user.RefreshTokenJTI = &refreshJTI
+	_, err = s.db.UserQuery().UpdateLoginOrLogout(ctx, user, user.ID)
+	_, err = s.db.UserQuery().UpdateAuthTime(ctx, user.ID)
+	if err != nil {
+		s.logger.Error("Failed to update token JTI", zap.Error(err))
+		return nil, status.Error(codes.Internal, "failed to update token JTI")
+	}
+
+	s.logger.Info("User logged in successfully", zap.Int64("user_id", user.ID), zap.String("username", req.Username))
+	return &pb.LoginResponse{
+		AccessToken:  accessToken,
+		RefreshToken: refreshToken,
+	}, nil
+}
+
+func (s *AuthService) Logout(ctx context.Context, userID int64) error {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	user, err := s.db.UserQuery().GetByID(ctx, userID)
+	if err != nil {
+		s.logger.Error("Failed to fetch user", zap.Error(err))
+		return status.Error(codes.Internal, "failed to fetch user")
+	}
+	if user == nil {
+		s.logger.Warn("User not found", zap.Int64("user_id", userID))
+		return status.Error(codes.NotFound, "user not found")
+	}
+
+	user.AccessTokenJTI = nil
+	user.RefreshTokenJTI = nil
+	_, err = s.db.UserQuery().UpdateLoginOrLogout(ctx, user, user.ID)
+	if err != nil {
+		s.logger.Error("Failed to update token JTI", zap.Error(err))
+		return status.Error(codes.Internal, "failed to update token JTI")
+	}
+
+	s.logger.Info("User logged out successfully", zap.Int64("user_id", userID))
+	return nil
+}
+
+func (s *AuthService) generateJWT(userID int64, tokenType string, roleName string, expiresIn time.Duration, secretKey []byte, jti string) (string, error) {
+	claims := jwt.MapClaims{
+		"sub":  userID,
+		"type": tokenType,
+		"role": roleName,
+		"exp":  time.Now().Add(expiresIn).Unix(),
+		"iat":  time.Now().Unix(),
+		"jti":  jti,
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	return token.SignedString(secretKey)
 }

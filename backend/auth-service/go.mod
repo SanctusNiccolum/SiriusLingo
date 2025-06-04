@@ -4,8 +4,10 @@ go 1.23.9
 
 require (
 	github.com/Masterminds/squirrel v1.5.4
+	github.com/dgrijalva/jwt-go v3.2.0+incompatible
 	github.com/elgris/stom v0.0.0-20160204063428-05ccb51a70bb
 	github.com/georgysavva/scany/v2 v2.1.4
+	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.7.5
 	github.com/joho/godotenv v1.5.1
 	go.uber.org/zap v1.27.0

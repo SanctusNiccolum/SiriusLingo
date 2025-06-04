@@ -46,6 +46,21 @@ func (s *AuthServer) Register(ctx context.Context, req *pb.RegisterRequest) (*pb
 	return s.service.Register(ctx, req)
 }
 
+func (s *AuthServer) Login(ctx context.Context, req *pb.LoginRequest) (*pb.LoginResponse, error) {
+	return s.service.Login(ctx, req)
+}
+
+func (s *AuthServer) Logout(ctx context.Context, req *pb.LogoutRequest) (*pb.LogoutResponse, error) {
+	s.logger.Debug("Logging out user", zap.Int64("user_id", req.UserId))
+	err := s.service.Logout(ctx, req.UserId)
+	if err != nil {
+		s.logger.Error("Logout failed", zap.Error(err))
+		return nil, err
+	}
+	s.logger.Info("Logout successful", zap.Int64("user_id", req.UserId))
+	return &pb.LogoutResponse{}, nil
+}
+
 func (s *AuthServer) ErrChan() chan error {
 	return s.errChan
 }
