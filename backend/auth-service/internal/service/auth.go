@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	pb "github.com/SanctusNiccolum/SiriusLingo/backend/auth-service/gen/go/proto"
@@ -173,6 +174,84 @@ func (s *AuthService) Logout(ctx context.Context, userID int64) error {
 
 	s.logger.Info("User logged out successfully", zap.Int64("user_id", userID))
 	return nil
+}
+
+func (s *AuthService) ValidateToken(ctx context.Context, tokenString string, tokenType string) (int64, error) {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+		}
+		claims, ok := token.Claims.(jwt.MapClaims)
+		if !ok {
+			return nil, fmt.Errorf("invalid token claims")
+		}
+		userIDFloat, ok := claims["sub"].(float64)
+		if !ok {
+			return nil, fmt.Errorf("invalid user ID in token")
+		}
+		userID := int64(userIDFloat)
+
+		claimedTokenType, ok := claims["type"].(string)
+		if !ok || claimedTokenType != tokenType {
+			return nil, fmt.Errorf("invalid token type: expected %s, got %s", tokenType, claimedTokenType)
+		}
+
+		claimedJTI, ok := claims["jti"].(string)
+		if !ok {
+			return nil, fmt.Errorf("invalid jti in token")
+		}
+
+		user, err := s.db.UserQuery().GetByID(ctx, userID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to fetch user: %w", err)
+		}
+		if user == nil {
+			return nil, fmt.Errorf("user not found")
+		}
+
+		if tokenType == "access" {
+			if user.AccessTokenJTI == nil || *user.AccessTokenJTI == "" {
+				return nil, fmt.Errorf("token revoked (user logged out)")
+			}
+			if *user.AccessTokenJTI != claimedJTI {
+				return nil, fmt.Errorf("invalid access token jti")
+			}
+			return []byte(user.AccessTokenSecret), nil
+		}
+		if user.RefreshTokenJTI == nil || *user.RefreshTokenJTI == "" {
+			return nil, fmt.Errorf("token revoked (user logged out)")
+		}
+		if *user.RefreshTokenJTI != claimedJTI {
+			return nil, fmt.Errorf("invalid refresh token jti")
+		}
+		return []byte(user.RefreshTokenSecret), nil
+	})
+
+	if err != nil {
+		s.logger.Error("Failed to parse token", zap.Error(err))
+		return 0, status.Error(codes.Unauthenticated, "invalid token")
+	}
+
+	if !token.Valid {
+		s.logger.Warn("Invalid token", zap.String("token_type", tokenType))
+		return 0, status.Error(codes.Unauthenticated, "token expired or invalid")
+	}
+
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok {
+		return 0, status.Error(codes.Unauthenticated, "invalid token claims")
+	}
+	userIDFloat, ok := claims["sub"].(float64)
+	if !ok {
+		return 0, status.Error(codes.Unauthenticated, "invalid user ID in token")
+	}
+	userID := int64(userIDFloat)
+
+	s.logger.Info("Token validated successfully", zap.Int64("user_id", userID), zap.String("token_type", tokenType))
+	return userID, nil
 }
 
 func (s *AuthService) generateJWT(userID int64, tokenType string, roleName string, expiresIn time.Duration, secretKey []byte, jti string) (string, error) {
