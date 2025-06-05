@@ -50,6 +50,28 @@ func (s *AuthServer) Login(ctx context.Context, req *pb.LoginRequest) (*pb.Login
 	return s.service.Login(ctx, req)
 }
 
+func (s *AuthServer) ValidateToken(ctx context.Context, req *pb.ValidateTokenRequest) (*pb.ValidateTokenResponse, error) {
+	s.logger.Debug("Validating token", zap.String("token_type", req.TokenType))
+	_, err := s.service.ValidateToken(ctx, req.Token, req.TokenType)
+	if err != nil {
+		s.logger.Error("Token validation failed", zap.Error(err))
+		return nil, err
+	}
+	s.logger.Info("Token validated successfully")
+	return &pb.ValidateTokenResponse{}, nil
+}
+
+func (s *AuthServer) Logout(ctx context.Context, req *pb.LogoutRequest) (*pb.LogoutResponse, error) {
+	s.logger.Debug("Logging out user", zap.Int64("user_id", req.UserId))
+	err := s.service.Logout(ctx, req.UserId)
+	if err != nil {
+		s.logger.Error("Logout failed", zap.Error(err))
+		return nil, err
+	}
+	s.logger.Info("Logout successful", zap.Int64("user_id", req.UserId))
+	return &pb.LogoutResponse{}, nil
+}
+
 func (s *AuthServer) ErrChan() chan error {
 	return s.errChan
 }
